@@ -1,63 +1,108 @@
 #include <mine_sweeper.h>
-void MineSweeper::Revert()
+int MineSweeper::Evaluate(int var)
 {
-    auto iter = flipped.begin();
-    int tries = flipped.size();
-    while(tries > 0)
+    int result = 0;
+    
+    assumption_safes.clear();
+    assumption_mines.clear();
+    if (map[var] != State_Evaluated_Safe)
     {
-        if(rand() % tries == 0)
-        {
-            flipped.erase(iter);
-            return;
-        }
-        ++iter;
-        --tries;
+        assumption_safes.insert(var);
     }
+    assert(Solve(constrains.begin(), 0, 0));
+    for (int i = 0; i < adj_max; i++)
+    {
+        int pos = GetVar(var, i);
+        if (pos == -1)
+        {
+            continue;
+        }
+        switch(map[pos])
+        {
+        case State_Unevaluated:
+        case State_Evaluated_Uncertain:
+            break;
+        case State_Flagged:
+        case State_Evaluated_Mine:
+            result++;
+            continue;
+        case State_Flipped:
+        case State_Evaluated_Safe:
+            continue;
+        }
+
+        if(assumption_mines.contains(pos))
+        {
+            result++;
+            continue;
+        }
+        if(assumption_safes.contains(pos))
+        {
+            continue;
+        }
+        int unevaluated_count = width * height - evaluated_mines - evaluated_safes  - flagged_count - constrains.size() - assumption_mines.size() - assumption_safes.size() ;
+        int unevaluated_mine_count = mines - evaluated_mines - flagged_count - assumption_mines.size();
+        bool isMine = rand() % unevaluated_count < unevaluated_mine_count;
+        (isMine ? assumption_mines : assumption_safes).insert(var);
+        result += isMine;
+    }
+    return result;
 }
 void MineSweeper::Analyse()
 {
-    solutions.clear();
-    solution_mines = 0;
-    solution_safes = 0;
-    for(auto& constrain : flipped)
+    for(auto& state: map)
+    {
+        switch(state)
+        {
+        case State_Evaluated_Safe:
+        case State_Evaluated_Uncertain:
+        case State_Evaluated_Mine:
+            state = State_Unevaluated;
+            break;
+        default:
+            break;
+        }
+    }
+    evaluated_mines = 0;
+    evaluated_safes = 0;
+    for(auto& constrain : constrains)
     {
         for(int i = 0; i < adj_max; i++)
         {
             int var = GetVar(constrain.first, i);
-            if (var < 0 || flagged.contains(var) || flipped.contains(var) || solutions.contains(var))
+            if (var < 0 || map[var] != State_Unevaluated)
             {
+                //无需计算
                 continue;
             }
-            assumptions.clear();
-            assumptions[var] = true;
-            assumption_mines = 1;
-            assumption_safes = 0;
-
-            if(!Solve(flipped.begin(), 0, 0))
+            assumption_safes.clear();
+            assumption_mines.clear();
+            assumption_mines.insert(var);
+            if(!Solve(constrains.begin(), 0, 0))
             {
-                solutions[var] = Analysed_Safe;
-                solution_safes++;
+                //不可能是雷
+                map[var] = State_Evaluated_Safe;
+                evaluated_safes++;
                 continue;
             }
-            assumptions.clear();
-            assumptions[var] = false;
-            assumption_mines = 0;
-            assumption_safes = 1;
-
-            if(!Solve(flipped.begin(), 0, 0))
+            assumption_safes.clear();
+            assumption_mines.clear();
+            assumption_safes.insert(var);
+            if(!Solve(constrains.begin(), 0, 0))
             {
-                solutions[var] = Analysed_Mine;
-                solution_mines++;                
+                //不可能不是雷
+                map[var] = State_Evaluated_Mine;
+                evaluated_mines++;                
                 continue;
             }
-            solutions[var] = Analysed_Both;
+            map[var] = State_Evaluated_Uncertain;
         }
     }
 }
 bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_constrain, int varidx_of_current, int sum_of_current)
 {
     //所有条件全部满足
-    if (current_constrain == flipped.end())
+    if (current_constrain == constrains.end())
     {
         return true;
     }
@@ -67,12 +112,12 @@ bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_con
         return false;
     }
     //雷已超过总数
-    if (assumption_mines + solution_mines + flagged.size() > mines)
+    if (assumption_mines.size() + evaluated_mines + flagged_count > mines)
     {
         return false;
     }
     //雷到不了总数
-    if (assumption_safes + solution_safes + flipped.size() + mines > width * height)
+    if (assumption_safes.size() + evaluated_safes + constrains.size() + mines > width * height)
     {
         return false;
     }
@@ -91,114 +136,38 @@ bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_con
     }
     
 
-    bool assumed = assumptions.contains(var);
+    bool assumed = assumption_safes.contains(var) || assumption_mines.contains(var);
     //当前变量已确定
-    if(flipped.contains(var))
+    switch(map[var])
     {
-        assert(!assumed && !solutions.contains(var));
+    case State_Unevaluated:
+    case State_Evaluated_Uncertain:
+        break;
+    case State_Flipped:
+    case State_Evaluated_Safe:
+        assert(!assumed);
         return Solve(current_constrain, varidx_of_current + 1, sum_of_current);
-    }
-    if(flagged.contains(var))
-    {  
-        assert(!assumed && !solutions.contains(var));
+    case State_Flagged:
+    case State_Evaluated_Mine:
+        assert(!assumed);
         return Solve(current_constrain, varidx_of_current + 1, sum_of_current + 1);
     }
-    if(solutions.contains(var))
-    {
-        switch(solutions.at(var))
-        {
-            case Analysed_Safe:
-                assert(!assumed);
-                return Solve(current_constrain, varidx_of_current + 1, sum_of_current);
-            case Analysed_Mine:
-                assert(!assumed);
-                return Solve(current_constrain, varidx_of_current + 1, sum_of_current + 1);
-        }
-    }
     //当前变量已假定
-    if(assumed)
+    if(assumption_safes.contains(var))
     {
-        return Solve(current_constrain, varidx_of_current + 1, sum_of_current + assumptions[var]);
+        return Solve(current_constrain, varidx_of_current + 1, sum_of_current);
     }
+    if(assumption_mines.contains(var))
+    {
+        return Solve(current_constrain, varidx_of_current + 1, sum_of_current + 1);
+    }
+    assumption_mines.insert(var);
+    if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
+    assumption_mines.erase(var);
 
-    assumptions[var] = true;
-    assumption_mines++;
+    assumption_safes.insert(var);
     if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
-    assumptions[var] = false;
-    assumption_mines--;
-    assumption_safes++;
-    if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
-    //假设不成立
-    assumptions.erase(var);
-    assumption_safes--;
+    assumption_safes.erase(var);
+    //无解 当前假设不成立
     return false;
-}
-std::string MineSweeper::Debug()
-{
-    std::string result;
-    for(int j = 0; j < height; j++)
-    {
-        for(int i = 0; i < width; i++)
-        {
-            int var = j * width + i;
-            if(flagged.contains(var))
-            {
-                result.append("标");
-            }
-            else if(flipped.contains(var))
-            {
-                switch(flipped[var])
-                {
-                case 0:
-                    result.append("零");
-                    break;
-                case 1:
-                    result.append("一");
-                    break;
-                case 2:
-                    result.append("二");
-                    break;
-                case 3:
-                    result.append("三");
-                    break;
-                case 4:
-                    result.append("四");
-                    break;
-                case 5:
-                    result.append("五");
-                    break;
-                case 6:
-                    result.append("六");
-                    break;
-                case 7:
-                    result.append("七");
-                    break;
-                case 8:
-                    result.append("八");
-                    break;
-                }
-            }
-            else if(solutions.contains(var))
-            {
-                switch(solutions.at(var))
-                {
-                case Analysed_Safe:
-                    result.append("安");
-                    break;
-                case Analysed_Both:
-                    result.append("危");
-                    break;
-                case Analysed_Mine:
-                    result.append("雷");
-                    break;
-                }
-            }
-            else
-            {
-                result.append("格");
-            }
-        }
-        result.append("\n");
-    }
-    return result;
 }

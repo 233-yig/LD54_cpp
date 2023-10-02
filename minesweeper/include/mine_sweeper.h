@@ -14,28 +14,33 @@ enum OpResult
 };
 class MineSweeper
 {
-    enum Analysed
+    enum State
     {
-        Analysed_Safe,
-        Analysed_Both,
-        Analysed_Mine,
-        Analysed_Count,
+        State_Unevaluated,
+        State_Flagged,
+        State_Flipped,
+        State_Evaluated_Safe,
+        State_Evaluated_Uncertain,
+        State_Evaluated_Mine,
+        
     };
 
     static constexpr int adj_max = 8;
-    
-    std::unordered_set<int> flagged;
-    std::unordered_map<int, int> flipped;
-    std::unordered_map<int, bool> assumptions;
-    int assumption_mines;
-    int assumption_safes;
-    std::unordered_map<int, Analysed> solutions;
-    int solution_mines;
-    int solution_safes;
-    int width;
-    int height;
-    int mines;
 
+    int width = 0;
+    int height = 0;
+    int mines = 0;
+    int max_flipped = 0;
+    
+    std::unordered_map<int, int> constrains;
+    std::unordered_set<int> assumption_safes;
+    std::unordered_set<int> assumption_mines;
+    std::vector<State> map;
+    int flagged_count = 0;
+    int evaluated_mines = 0;
+    int evaluated_safes = 0;
+
+    bool Solve(std::unordered_map<int, int>::const_iterator current_constrain, int varidx_of_current, int sum_of_current);
     int GetVar(int pos, int offset)
     {
         int x = pos % width;
@@ -69,115 +74,125 @@ class MineSweeper
         }
         return -1;
     }
-    bool Solve(std::unordered_map<int, int>::const_iterator current_constrain, int varidx_of_current, int sum_of_current);
-    void Analyse();
-    void Revert();
+    int Evaluate(int var);
 public:
-    void Load(int w, int h, int count, const char* map)
+    void Analyse();
+    void Load(int w, int h, int m, int f, const char* s)
     {
         width = w;
         height = h;
-        mines = count;
-        solution_mines = 0;
-        solution_safes = 0;
-        assumption_mines = 0;
-        assumption_safes = 0;
-        for(int i = 0; i < width * height; i++)
-        {
-            if(*map >= '0' && *map <= '8')
-            {
-                flipped[i] = *map - '0';
-            }
-            else if(*map =='f')
-            {
-                flagged.insert(i);
-            }
-            else if(*map != 'e')
-            {
-                i--;
-            }
-            map++;
-        }
-        Analyse();
-    }
-    OpResult Flip(int x, int y)
-    {
-        int var = x + width * y;
-        if(flagged.contains(var)) return OpResult_Invalid;
-        if(flipped.contains(var)) return OpResult_Invalid;
-        if(!solutions.contains(var)) return OpResult_Invalid;
-        if(solutions.at(var) == Analysed_Mine) return OpResult_Lose;
-        if (solutions.at(var) == Analysed_Both && solution_safes > 0) return OpResult_Lose;
-        assumptions.clear();
-        assumption_mines = 0;
-        assumption_safes = 0;
-        if (solutions.at(var) != Analysed_Safe)
-        {
-            assumptions[var] = false;
-            assumption_safes = 1;
-        }
-        assert(Solve(flipped.begin(), 0, 0));
-        
-        flipped[var] = 0;
-        for (int i = 0; i < adj_max; i++)
-        {
-            int pos = GetVar(var, i);
-            if (pos == -1)
-            {
-                continue;
-            }
-            if (flipped.contains(pos))
-            {
-                continue;
-            }
-            if (flagged.contains(pos))
-            {
-                flipped.at(var)++;
-                continue;
-            }
-            if (solutions.contains(pos))
-            {
-                if (solutions.at(pos) == Analysed_Mine)
-                {
-                    flipped.at(var)++;
-                }
-                if (solutions.at(pos) == Analysed_Safe)
-                {
-                    continue;
-                }
+        mines = m;
+        max_flipped = f;
 
-            }
-            if (!assumptions.contains(pos))
+        constrains.clear();
+        assumption_safes.clear();
+        assumption_mines.clear();
+        map.resize(width * height);
+        flagged_count = 0;
+        evaluated_mines = 0;
+        evaluated_safes = 0;
+        for(int i = 0; i < width * height; i++, s++)
+        {
+            if(*s >= '0' && *s <= '8')
             {
-                assumptions[pos] = rand() % (width * height - flipped.size() - flagged.size() - solution_mines - solution_safes - assumption_mines - assumption_safes) <= mines - solution_mines - assumption_mines - flagged.size();
-            }
-            if (assumptions.at(pos) == true)
-            {
-                flipped.at(var)++;
+                map[i] = State_Flipped;
+                constrains[i] = *s - '0';
                 continue;
             }
+            switch(*s)
+            {
+            case 'f':
+                map[i] = State_Flagged;
+                flagged_count++;
+                continue;
+            case 'e':
+                map[i] = State_Unevaluated;
+                continue;
+            default:
+                break;
+            }
+            i--;
         }
-        
-        Revert();
         Analyse();
-        return OpResult_Success;
     }
-    OpResult Flag(int x, int y)
+    
+    OpResult Flip(int var)
     {
-        int var = x + width * y;
-        if(flagged.contains(var)) return OpResult_Invalid;
-        if(flipped.contains(var)) return OpResult_Invalid;
-        if (!solutions.contains(var) || solutions.at(var) != Analysed_Mine) return OpResult_Lose;
-        flagged.insert(var);
-        Revert();
-        if(flagged.size() == mines)
+        switch(map[var])
+        {
+        case State_Unevaluated:
+        case State_Evaluated_Uncertain:
+            if(evaluated_safes != 0) return OpResult_Lose;
+        case State_Evaluated_Safe:
+            break;
+        case State_Flagged:
+        case State_Flipped:
+            return OpResult_Invalid;
+        case State_Evaluated_Mine:
+            return OpResult_Lose;
+        }
+        constrains[var] = Evaluate(var);
+        map[var] = State_Flipped;
+        if(constrains.size() <= max_flipped)
+        {
+            return OpResult_Success;
+        }
+        int tries = constrains.size();
+        for(auto it = constrains.begin(); it != constrains.end(); ++it)
+        {
+            if(rand() % tries-- == 0)
+            {
+                map[it->first] = State_Unevaluated;
+                constrains.erase(it);
+                return OpResult_Success;
+            }
+        }
+        //不可能走到这
+        assert(false);
+        return OpResult_Invalid;
+    }
+    OpResult Flag(int var)
+    {
+        switch(map[var])
+        {
+        case State_Flagged:
+        case State_Flipped:
+            return OpResult_Invalid;
+        case State_Unevaluated:
+        case State_Evaluated_Uncertain:
+        case State_Evaluated_Safe:
+            return OpResult_Lose;
+        case State_Evaluated_Mine:
+            map[var] = State_Flagged;
+            flagged_count++;
+            break;
+        }
+        if(flagged_count == mines)
         {
             return OpResult_Win;
         }
-        Analyse();
         return OpResult_Success;
     }
-
+    OpResult Revert(int var)
+    {
+        switch(map[var])
+        {
+        case State_Unevaluated:
+        case State_Evaluated_Uncertain:
+        case State_Evaluated_Safe:
+        case State_Evaluated_Mine:
+            return OpResult_Invalid;
+        case State_Flagged:
+            map[var] = State_Unevaluated;
+            flagged_count--;
+            break;
+        case State_Flipped:
+            map[var] = State_Unevaluated;
+            constrains.erase(var);
+            break;
+        }
+        return OpResult_Success;
+    }
     
     int Width() const
     {
@@ -189,33 +204,26 @@ public:
     }
     int Mines() const
     {
-        return mines - flagged.size();
+        return mines - flagged_count;
     }
     char GetState(int var) const
     {
-        if(flipped.contains(var))
+        switch(map[var])
         {
-            return '0' + flipped.at(var);
-        }
-        if(flagged.contains(var))
-        {
+        case State_Unevaluated:    
+            return 'e';
+        case State_Flagged:
             return 'f';
+        case State_Flipped:
+            return '0' + constrains.at(var);
+        case State_Evaluated_Safe:
+            return 's';
+        case State_Evaluated_Uncertain:
+            return 'w';
+        case State_Evaluated_Mine:
+            return 'm';
         }
-        if(solutions.contains(var))
-        {
-            switch(solutions.at(var))
-            {
-            case Analysed_Safe:
-                return 's';
-            case Analysed_Both:
-                return 'w';
-            case Analysed_Mine:
-                return 'm';
-            }
-        }
-        return 'e';
-
+        assert(false);
+        return '\0';
     }
-
-    std::string Debug();
 };

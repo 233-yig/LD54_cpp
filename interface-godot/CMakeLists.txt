@@ -26,3 +26,8 @@ target_link_libraries(interface-godot
     PRIVATE game::minesweeper
     PRIVATE godot::cpp
 )
+if(EMSCRIPTEN)
+    target_link_options(interface-godot
+        PRIVATE -fPIC
+    )
+endif()

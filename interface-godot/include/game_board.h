@@ -1,6 +1,5 @@
 #pragma once
 #include <mine_sweeper.h>
-#include <format>
 
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/classes/control.hpp>
@@ -45,9 +44,10 @@ namespace godot{
             BIND_ENUM_CONSTANT(OpResult_Lose);
             BIND_ENUM_CONSTANT(OpResult_Win);
             BIND_ENUM_CONSTANT(OpResult_Count);
-            ClassDB::bind_method(D_METHOD("load", "width", "height", "mines", "map"), &Load);
-            ClassDB::bind_method(D_METHOD("flag", "x", "y"), &Flag);
-            ClassDB::bind_method(D_METHOD("flip", "x", "y"), &Flip);
+            ClassDB::bind_method(D_METHOD("load_data", "map_size", "mine_count", "max_flipped", "map"), &GameBoard::Load);
+            ClassDB::bind_method(D_METHOD("flag", "pos"), &GameBoard::Flag);
+            ClassDB::bind_method(D_METHOD("flip", "pos"), &GameBoard::Flip);
+            ClassDB::bind_method(D_METHOD("revert", "pos"), &GameBoard::Revert);
         }
         bool _get(const StringName &p_property, Variant &r_value) const // return true if property was found
         {
@@ -73,24 +73,42 @@ namespace godot{
         {
             r_props->push_back(PropertyInfo(
                 Variant::ARRAY,"tiles", PROPERTY_HINT_ARRAY_TYPE, 
-                std::format("{}/{}:{}", (int)GDEXTENSION_VARIANT_TYPE_OBJECT, (int)PROPERTY_HINT_RESOURCE_TYPE, "Texture2D").c_str()
+                String("%d/%d:%s").format(Array::make((int)GDEXTENSION_VARIANT_TYPE_OBJECT, (int)PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"))
             ));
         }
     public:
-        void Load(int width, int height, int mines, String map)
+        void Load(Vector2i mapSize, int mines, int max_flipped, String map)
         {
-            game.Load(width, height, mines, map.ascii().get_data());
+            game.Load(mapSize.width, mapSize.height, mines, max_flipped, map.ascii().get_data());
         }
-        int Flag(int x, int y)
+        int Flag(Vector2i pos)
         {
-            int result = game.Flag(x, y);
-            queue_redraw();
+            int result = game.Flag(pos.x + pos.y * game.Width());
+            if(result == OpResult_Success)
+            {
+                game.Analyse();
+                queue_redraw();
+            }
             return result;
         }
-        int Flip(int x, int y)
+        int Flip(Vector2i pos)
         {
-            int result = game.Flip(x, y);
-            queue_redraw();
+            int result = game.Flip(pos.x + pos.y * game.Width());
+            if(result == OpResult_Success)
+            {
+                game.Analyse();
+                queue_redraw();
+            }
+            return result;
+        }
+        int Revert(Vector2i pos)
+        {
+            int result = game.Revert(pos.x + pos.y*game.Width());
+            if(result == OpResult_Success)
+            {
+                game.Analyse();
+                queue_redraw();
+            }
             return result;
         }
         void _draw() override
@@ -101,10 +119,9 @@ namespace godot{
                 {
                     Ref<Texture2D> texture = GetTexture(game.GetState(i * game.Width()+ j));
                     Vector2 texture_size = texture->get_size();
-                    draw_texture_rect(texture, Rect2((j - 0.5) * texture_size.x, (i - 0.5) * texture_size.y, texture_size.x, texture_size.y), false);
+                    draw_texture_rect(texture, Rect2((j + 0.5) * texture_size.x, (i + 0.5) * texture_size.y, texture_size.x, texture_size.y), false);
                 }
             }
         }
-
     };
 }
