@@ -84,7 +84,7 @@ namespace godot{
         int Flag(Vector2i pos)
         {
             int result = game.Flag(pos.x + pos.y * game.Width());
-            if(result == OpResult_Success)
+            if(result == OpResult_Success || result == OpResult_Win)
             {
                 game.Analyse();
                 queue_redraw();
@@ -119,7 +119,7 @@ namespace godot{
                 {
                     Ref<Texture2D> texture = GetTexture(game.GetState(i * game.Width()+ j));
                     Vector2 texture_size = texture->get_size();
-                    draw_texture_rect(texture, Rect2((j + 0.5) * texture_size.x, (i + 0.5) * texture_size.y, texture_size.x, texture_size.y), false);
+                    draw_texture_rect(texture, Rect2((j - 0.5) * texture_size.x, (i - 0.5) * texture_size.y, texture_size.x, texture_size.y), false);
                 }
             }
         }

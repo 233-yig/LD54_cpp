@@ -65,6 +65,7 @@ void MineSweeper::Analyse()
     }
     evaluated_mines = 0;
     evaluated_safes = 0;
+    evaluated_uncertains = 0;
     for(auto& constrain : constrains)
     {
         for(int i = 0; i < adj_max; i++)
@@ -90,12 +91,13 @@ void MineSweeper::Analyse()
             assumption_safes.insert(var);
             if(!Solve(constrains.begin(), 0, 0))
             {
-                //不可能不是雷
+                //只可能是雷
                 map[var] = State_Evaluated_Mine;
                 evaluated_mines++;                
                 continue;
             }
             map[var] = State_Evaluated_Uncertain;
+            evaluated_uncertains++;
         }
     }
 }

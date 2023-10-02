@@ -39,6 +39,7 @@ class MineSweeper
     int flagged_count = 0;
     int evaluated_mines = 0;
     int evaluated_safes = 0;
+    int evaluated_uncertains = 0;
 
     bool Solve(std::unordered_map<int, int>::const_iterator current_constrain, int varidx_of_current, int sum_of_current);
     int GetVar(int pos, int offset)
@@ -91,6 +92,7 @@ public:
         flagged_count = 0;
         evaluated_mines = 0;
         evaluated_safes = 0;
+        evaluated_uncertains = 0;
         for(int i = 0; i < width * height; i++, s++)
         {
             if(*s >= '0' && *s <= '8')
@@ -121,8 +123,10 @@ public:
         switch(map[var])
         {
         case State_Unevaluated:
+            if(evaluated_safes > 0) return OpResult_Lose;
+            if(evaluated_uncertains > 0) return OpResult_Invalid;
         case State_Evaluated_Uncertain:
-            if(evaluated_safes != 0) return OpResult_Lose;
+            if(evaluated_safes > 0) return OpResult_Lose;
         case State_Evaluated_Safe:
             break;
         case State_Flagged:
@@ -159,6 +163,15 @@ public:
         case State_Flipped:
             return OpResult_Invalid;
         case State_Unevaluated:
+            assumption_safes.clear();
+            assumption_mines.clear();
+            assumption_safes.insert(var);
+            if(!Solve(constrains.begin(), 0, 0))
+            {
+                map[var] = State_Flagged;
+                flagged_count++;
+                break;
+            }
         case State_Evaluated_Uncertain:
         case State_Evaluated_Safe:
             return OpResult_Lose;
