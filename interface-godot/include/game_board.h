@@ -11,8 +11,10 @@ namespace godot{
     class GameBoard: public Control
     {
         GDCLASS(GameBoard, Control)
-
+        MineSweeper game;
         Variant tiles;
+        bool dbg;
+
         Ref<Texture2D> GetTexture(char state)
         {
             if(state >= '0' && state <= '8')
@@ -26,16 +28,15 @@ namespace godot{
             case 'f':
                 return static_cast<Array>(tiles)[10];
             case 's':
-                return static_cast<Array>(tiles)[11];
+                return static_cast<Array>(tiles)[dbg?11:9];
             case 'w':
-                return static_cast<Array>(tiles)[12];
+                return static_cast<Array>(tiles)[dbg?12:9];
             case 'm':
-                return static_cast<Array>(tiles)[13];
+                return static_cast<Array>(tiles)[dbg?13:9];
             }
             return nullptr;
         }
 
-        MineSweeper game;
     protected:
         static void _bind_methods()
         {
@@ -48,6 +49,9 @@ namespace godot{
             ClassDB::bind_method(D_METHOD("flag", "pos"), &GameBoard::Flag);
             ClassDB::bind_method(D_METHOD("flip", "pos"), &GameBoard::Flip);
             ClassDB::bind_method(D_METHOD("revert", "pos"), &GameBoard::Revert);
+            ClassDB::bind_method(D_METHOD("debug", "open"), &GameBoard::Debug);
+            ClassDB::bind_method(D_METHOD("flip_count"), &GameBoard::FlipCount);
+            ClassDB::bind_method(D_METHOD("flag_count"), &GameBoard::FlagCount);
         }
         bool _get(const StringName &p_property, Variant &r_value) const // return true if property was found
         {
@@ -73,13 +77,19 @@ namespace godot{
         {
             r_props->push_back(PropertyInfo(
                 Variant::ARRAY,"tiles", PROPERTY_HINT_ARRAY_TYPE, 
-                String("%d/%d:%s").format(Array::make((int)GDEXTENSION_VARIANT_TYPE_OBJECT, (int)PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"))
+                String("{0}/{1}:{2}").format(Array::make((int)GDEXTENSION_VARIANT_TYPE_OBJECT, (int)PROPERTY_HINT_RESOURCE_TYPE, "Texture2D"))
             ));
         }
     public:
+        void Debug(bool open)
+        {
+            dbg = open;
+            queue_redraw();
+        }
         void Load(Vector2i mapSize, int mines, int max_flipped, String map)
         {
             game.Load(mapSize.width, mapSize.height, mines, max_flipped, map.ascii().get_data());
+            queue_redraw();
         }
         int Flag(Vector2i pos)
         {
@@ -111,6 +121,14 @@ namespace godot{
             }
             return result;
         }
+        int FlipCount() const
+        {
+            return game.FlipCount();
+        }
+        int FlagCount() const
+        {
+            return game.FlagCount();
+        }
         void _draw() override
         {
             for(int i = 0; i < game.Height(); i++)
@@ -119,7 +137,7 @@ namespace godot{
                 {
                     Ref<Texture2D> texture = GetTexture(game.GetState(i * game.Width()+ j));
                     Vector2 texture_size = texture->get_size();
-                    draw_texture_rect(texture, Rect2((j - 0.5) * texture_size.x, (i - 0.5) * texture_size.y, texture_size.x, texture_size.y), false);
+                    draw_texture_rect(texture, Rect2(j * texture_size.x, i * texture_size.y, texture_size.x, texture_size.y), false);
                 }
             }
         }

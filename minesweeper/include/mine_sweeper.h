@@ -120,6 +120,10 @@ public:
     
     OpResult Flip(int var)
     {
+        if(var >= map.size())
+        {
+            return OpResult_Invalid;
+        }
         switch(map[var])
         {
         case State_Unevaluated:
@@ -157,6 +161,10 @@ public:
     }
     OpResult Flag(int var)
     {
+        if(var >= map.size())
+        {
+            return OpResult_Invalid;
+        }
         switch(map[var])
         {
         case State_Flagged:
@@ -188,6 +196,10 @@ public:
     }
     OpResult Revert(int var)
     {
+        if(var >= map.size())
+        {
+            return OpResult_Invalid;
+        }
         switch(map[var])
         {
         case State_Unevaluated:
@@ -218,6 +230,14 @@ public:
     int Mines() const
     {
         return mines - flagged_count;
+    }
+    int FlagCount() const
+    {
+        return flagged_count;
+    }
+    int FlipCount() const
+    {
+        return constrains.size();
     }
     char GetState(int var) const
     {
