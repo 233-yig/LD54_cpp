@@ -1,10 +1,12 @@
 #pragma once
+#include <array>
 #include <mine_sweeper.h>
 
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/classes/multi_mesh.hpp>
 
 VARIANT_ENUM_CAST(OpResult);
 namespace godot{
@@ -33,6 +35,8 @@ namespace godot{
                 return static_cast<Array>(tiles)[dbg?12:9];
             case 'm':
                 return static_cast<Array>(tiles)[dbg?13:9];
+            case 'b':
+                return static_cast<Array>(tiles)[14];
             }
             return nullptr;
         }
@@ -86,10 +90,11 @@ namespace godot{
             dbg = open;
             queue_redraw();
         }
-        void Load(Vector2i mapSize, int mines, int max_flipped, String map)
+        bool Load(Vector2i mapSize, int mines, int max_flipped, String map)
         {
-            game.Load(mapSize.width, mapSize.height, mines, max_flipped, map.ascii().get_data());
+            bool result = game.Load(mapSize.width, mapSize.height, mines, max_flipped, map.ascii().get_data());
             queue_redraw();
+            return result;
         }
         int Flag(Vector2i pos)
         {

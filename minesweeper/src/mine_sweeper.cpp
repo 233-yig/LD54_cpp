@@ -1,13 +1,15 @@
 #include <mine_sweeper.h>
-int MineSweeper::Evaluate(int var)
+int MineSweeper::Success(int var)
 {
     int result = 0;
     
-    assumption_safes.clear();
-    assumption_mines.clear();
+    assumptions.clear();
+    assumption_mines = 0;
+    assumption_safes = 0;
     if (map[var] != State_Evaluated_Safe)
     {
-        assumption_safes.insert(var);
+        assumptions[var] = false;
+        assumption_safes++;
     }
     assert(Solve(constrains.begin(), 0, 0));
     for (int i = 0; i < adj_max; i++)
@@ -31,22 +33,56 @@ int MineSweeper::Evaluate(int var)
             continue;
         }
 
-        if(assumption_mines.contains(pos))
+        if(assumptions.contains(pos))
         {
-            result++;
+            result += assumptions[pos];
             continue;
         }
-        if(assumption_safes.contains(pos))
-        {
-            continue;
-        }
-        int unevaluated_count = width * height - evaluated_mines - evaluated_safes  - flagged_count - constrains.size() - assumption_mines.size() - assumption_safes.size() ;
-        int unevaluated_mine_count = mines - evaluated_mines - flagged_count - assumption_mines.size();
-        bool isMine = rand() % unevaluated_count < unevaluated_mine_count;
-        (isMine ? assumption_mines : assumption_safes).insert(var);
+        int decided_mine_count = evaluated_mines + flagged_count + assumption_mines;
+        int decided_safe_count = evaluated_safes + constrains.size() + assumption_safes;
+        bool isMine = rand() % (width * height - decided_mine_count - decided_safe_count) < mines - decided_mine_count;
+        (isMine ? assumption_mines : assumption_safes)++;
+        //assumptions[pos] = isMine;
         result += isMine;
     }
     return result;
+}
+void MineSweeper::Fail(int var)
+{
+    assumptions.clear();
+    assumption_mines = 0;
+    assumption_safes = 0;
+    if(map.at(var) != State_Evaluated_Mine)
+    {
+        assumptions[var] = true;
+        assumption_mines++;
+    }
+    assert(Solve(constrains.begin(), 0, 0));
+    for(int i = 0; i < width * height; i++)
+    {
+        if(map.at(var) == State_Unevaluated)
+        {
+
+            int decided_mine_count = evaluated_mines + flagged_count + assumption_mines;
+            int decided_safe_count = evaluated_safes + constrains.size() + assumption_safes;
+            bool isMine = rand() % (width * height - decided_mine_count - decided_safe_count) < mines - decided_mine_count;
+            (isMine ? assumption_mines : assumption_safes)++;
+            //assumptions[pos] = isMine;
+            map.at(var) = State_Lose;
+        }
+        else if(map.at(var) == State_Evaluated_Uncertain)
+        {
+            assert(assumptions.contains(var));
+            if(assumptions.at(var))
+            {
+                map.at(var) = State_Lose;
+            }
+        }
+        else if(map.at(var) == State_Evaluated_Mine)
+        {
+            map.at(var) = State_Lose;
+        }
+    }
 }
 void MineSweeper::Analyse()
 {
@@ -76,9 +112,10 @@ void MineSweeper::Analyse()
                 //无需计算
                 continue;
             }
-            assumption_safes.clear();
-            assumption_mines.clear();
-            assumption_mines.insert(var);
+            assumptions.clear();
+            assumptions[var] = true;
+            assumption_mines = 1;
+            assumption_safes = 0;
             if(!Solve(constrains.begin(), 0, 0))
             {
                 //不可能是雷
@@ -86,9 +123,10 @@ void MineSweeper::Analyse()
                 evaluated_safes++;
                 continue;
             }
-            assumption_safes.clear();
-            assumption_mines.clear();
-            assumption_safes.insert(var);
+            assumptions.clear();
+            assumptions[var] = false;
+            assumption_mines = 0;
+            assumption_safes = 1;
             if(!Solve(constrains.begin(), 0, 0))
             {
                 //只可能是雷
@@ -103,23 +141,19 @@ void MineSweeper::Analyse()
 }
 bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_constrain, int varidx_of_current, int sum_of_current)
 {
-    //所有条件全部满足
-    if (current_constrain == constrains.end())
-    {
-        return true;
-    }
+    
     //当前约束无法满足
     if (varidx_of_current > adj_max || sum_of_current > current_constrain->second)
     {
         return false;
     }
     //雷已超过总数
-    if (assumption_mines.size() + evaluated_mines + flagged_count > mines)
+    if (assumption_mines + evaluated_mines + flagged_count > mines)
     {
         return false;
     }
     //雷到不了总数
-    if (assumption_safes.size() + evaluated_safes + constrains.size() + mines > width * height)
+    if (assumption_safes + evaluated_safes + constrains.size() + mines > width * height)
     {
         return false;
     }
@@ -127,7 +161,13 @@ bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_con
     //当前约束已满足
     if(varidx_of_current == adj_max && sum_of_current == current_constrain->second)
     {
-        return Solve(++current_constrain, 0, 0);
+        ++current_constrain;
+        //所有条件全部满足
+        if (current_constrain == constrains.end())
+        {
+            return true;
+        }
+        return Solve(current_constrain, 0, 0);
     }
     
     int var = GetVar(current_constrain->first, varidx_of_current);
@@ -138,7 +178,7 @@ bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_con
     }
     
 
-    bool assumed = assumption_safes.contains(var) || assumption_mines.contains(var);
+    bool assumed = assumptions.contains(var);
     //当前变量已确定
     switch(map[var])
     {
@@ -155,21 +195,37 @@ bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_con
         return Solve(current_constrain, varidx_of_current + 1, sum_of_current + 1);
     }
     //当前变量已假定
-    if(assumption_safes.contains(var))
+    if(assumptions.contains(var))
     {
-        return Solve(current_constrain, varidx_of_current + 1, sum_of_current);
+        return Solve(current_constrain, varidx_of_current + 1, sum_of_current + assumptions.at(var));
     }
-    if(assumption_mines.contains(var))
+    switch (rand() % 2)
     {
-        return Solve(current_constrain, varidx_of_current + 1, sum_of_current + 1);
-    }
-    assumption_mines.insert(var);
-    if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
-    assumption_mines.erase(var);
+    case 0:
+        assumptions[var] = true;
+        assumption_mines++;
+        if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
+        assumption_mines--;
 
-    assumption_safes.insert(var);
-    if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
-    assumption_safes.erase(var);
+        assumptions[var] = false;
+        assumption_safes++;
+        if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
+        assumption_safes--;
+        break;
+    
+    case 1:
+        assumptions[var] = false;
+        assumption_safes++;
+        if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
+        assumption_safes--;
+
+        assumptions[var] = true;
+        assumption_mines++;
+        if(Solve(current_constrain, varidx_of_current, sum_of_current)) return true;
+        assumption_mines--;
+        break;
+    }
     //无解 当前假设不成立
+    assumptions.erase(var);
     return false;
 }

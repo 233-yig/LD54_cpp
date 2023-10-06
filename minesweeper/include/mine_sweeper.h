@@ -22,7 +22,7 @@ class MineSweeper
         State_Evaluated_Safe,
         State_Evaluated_Uncertain,
         State_Evaluated_Mine,
-        
+        State_Lose
     };
 
     static constexpr int adj_max = 8;
@@ -32,14 +32,15 @@ class MineSweeper
     int mines = 0;
     int max_flipped = 0;
     
-    std::unordered_map<int, int> constrains;
-    std::unordered_set<int> assumption_safes;
-    std::unordered_set<int> assumption_mines;
     std::vector<State> map;
     int flagged_count = 0;
     int evaluated_mines = 0;
     int evaluated_safes = 0;
     int evaluated_uncertains = 0;
+    std::unordered_map<int, bool> assumptions;
+    int assumption_safes = 0;
+    int assumption_mines = 0;
+    std::unordered_map<int, int> constrains;
 
     bool Solve(std::unordered_map<int, int>::const_iterator current_constrain, int varidx_of_current, int sum_of_current);
     int GetVar(int pos, int offset)
@@ -75,24 +76,27 @@ class MineSweeper
         }
         return -1;
     }
-    int Evaluate(int var);
+    int Success(int var);
+    void Fail(int var);
 public:
     void Analyse();
-    void Load(int w, int h, int m, int f, const char* s)
+    bool Load(int w, int h, int m, int f, const char* s)
     {
         width = w;
         height = h;
         mines = m;
         max_flipped = f;
 
-        constrains.clear();
-        assumption_safes.clear();
-        assumption_mines.clear();
         map.resize(width * height);
         flagged_count = 0;
         evaluated_mines = 0;
         evaluated_safes = 0;
         evaluated_uncertains = 0;
+        assumptions.clear();
+        assumption_mines = 0;
+        assumption_safes = 0;
+        constrains.clear();
+
         for(int i = 0; i < width * height; i++, s++)
         {
             if(*s >= '0' && *s <= '8')
@@ -115,8 +119,14 @@ public:
             }
             i--;
         }
+        if(!Solve(constrains.begin(), 0, 0))
+        {
+            return false;
+        }
         Analyse();
+        return true;
     }
+    
     
     OpResult Flip(int var)
     {
@@ -127,8 +137,6 @@ public:
         switch(map[var])
         {
         case State_Unevaluated:
-            if(evaluated_safes > 0) return OpResult_Lose;
-            if(evaluated_uncertains > 0) return OpResult_Invalid;
         case State_Evaluated_Uncertain:
             if(evaluated_safes > 0) return OpResult_Lose;
         case State_Evaluated_Safe:
@@ -139,7 +147,7 @@ public:
         case State_Evaluated_Mine:
             return OpResult_Lose;
         }
-        constrains[var] = Evaluate(var);
+        constrains[var] = Success(var);
         map[var] = State_Flipped;
         if(constrains.size() <= max_flipped)
         {
@@ -171,9 +179,10 @@ public:
         case State_Flipped:
             return OpResult_Invalid;
         case State_Unevaluated:
-            assumption_safes.clear();
-            assumption_mines.clear();
-            assumption_safes.insert(var);
+            assumptions.clear();
+            assumptions[var] = 0;
+            assumption_mines = 0;
+            assumption_safes = 1;
             if(!Solve(constrains.begin(), 0, 0))
             {
                 map[var] = State_Flagged;
@@ -255,6 +264,8 @@ public:
             return 'w';
         case State_Evaluated_Mine:
             return 'm';
+        case State_Lose:
+            return 'b';
         }
         assert(false);
         return '\0';
