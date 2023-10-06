@@ -99,9 +99,12 @@ namespace godot{
         int Flag(Vector2i pos)
         {
             int result = game.Flag(pos.x + pos.y * game.Width());
-            if(result == OpResult_Success || result == OpResult_Win)
+            if (result == OpResult_Success)
             {
                 game.Analyse();
+            }
+            if(result == OpResult_Success || result == OpResult_Win || result == OpResult_Lose)
+            {
                 queue_redraw();
             }
             return result;
@@ -109,9 +112,12 @@ namespace godot{
         int Flip(Vector2i pos)
         {
             int result = game.Flip(pos.x + pos.y * game.Width());
-            if(result == OpResult_Success)
+            if (result == OpResult_Success)
             {
                 game.Analyse();
+            }
+            if (result == OpResult_Success || result == OpResult_Win || result == OpResult_Lose)
+            {
                 queue_redraw();
             }
             return result;
@@ -119,9 +125,12 @@ namespace godot{
         int Revert(Vector2i pos)
         {
             int result = game.Revert(pos.x + pos.y*game.Width());
-            if(result == OpResult_Success)
+            if (result == OpResult_Success)
             {
                 game.Analyse();
+            }
+            if (result == OpResult_Success || result == OpResult_Win || result == OpResult_Lose)
+            {
                 queue_redraw();
             }
             return result;

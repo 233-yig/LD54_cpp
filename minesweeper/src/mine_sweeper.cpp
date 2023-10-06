@@ -47,20 +47,25 @@ int MineSweeper::Success(int var)
     }
     return result;
 }
-void MineSweeper::Fail(int var)
+void MineSweeper::Fail(int var, bool isMine)
 {
     assumptions.clear();
     assumption_mines = 0;
     assumption_safes = 0;
-    if(map.at(var) != State_Evaluated_Mine)
+    if(isMine && map.at(var) != State_Evaluated_Mine)
     {
         assumptions[var] = true;
         assumption_mines++;
     }
+    if (!isMine && map.at(var) != State_Evaluated_Safe)
+    {
+        assumptions[var] = false;
+        assumption_safes++;
+    }
     assert(Solve(constrains.begin(), 0, 0));
     for(int i = 0; i < width * height; i++)
     {
-        if(map.at(var) == State_Unevaluated)
+        if(map.at(i) == State_Unevaluated)
         {
 
             int decided_mine_count = evaluated_mines + flagged_count + assumption_mines;
@@ -68,19 +73,22 @@ void MineSweeper::Fail(int var)
             bool isMine = rand() % (width * height - decided_mine_count - decided_safe_count) < mines - decided_mine_count;
             (isMine ? assumption_mines : assumption_safes)++;
             //assumptions[pos] = isMine;
-            map.at(var) = State_Lose;
-        }
-        else if(map.at(var) == State_Evaluated_Uncertain)
-        {
-            assert(assumptions.contains(var));
-            if(assumptions.at(var))
+            if (isMine)
             {
-                map.at(var) = State_Lose;
+                map.at(i) = State_Lose;
             }
         }
-        else if(map.at(var) == State_Evaluated_Mine)
+        else if(map.at(i) == State_Evaluated_Uncertain)
         {
-            map.at(var) = State_Lose;
+            assert(assumptions.contains(i));
+            if(assumptions.at(i))
+            {
+                map.at(i) = State_Lose;
+            }
+        }
+        else if(map.at(i) == State_Evaluated_Mine)
+        {
+            map.at(i) = State_Lose;
         }
     }
 }
@@ -141,7 +149,11 @@ void MineSweeper::Analyse()
 }
 bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_constrain, int varidx_of_current, int sum_of_current)
 {
-    
+    //所有条件全部满足
+    if (current_constrain == constrains.end())
+    {
+        return true;
+    }
     //当前约束无法满足
     if (varidx_of_current > adj_max || sum_of_current > current_constrain->second)
     {
@@ -161,13 +173,7 @@ bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_con
     //当前约束已满足
     if(varidx_of_current == adj_max && sum_of_current == current_constrain->second)
     {
-        ++current_constrain;
-        //所有条件全部满足
-        if (current_constrain == constrains.end())
-        {
-            return true;
-        }
-        return Solve(current_constrain, 0, 0);
+        return Solve(++current_constrain, 0, 0);
     }
     
     int var = GetVar(current_constrain->first, varidx_of_current);

@@ -77,7 +77,7 @@ class MineSweeper
         return -1;
     }
     int Success(int var);
-    void Fail(int var);
+    void Fail(int var, bool isMine);
 public:
     void Analyse();
     bool Load(int w, int h, int m, int f, const char* s)
@@ -119,7 +119,7 @@ public:
             }
             i--;
         }
-        if(!Solve(constrains.begin(), 0, 0))
+        if(!constrains.empty() && !Solve(constrains.begin(), 0, 0))
         {
             return false;
         }
@@ -138,13 +138,18 @@ public:
         {
         case State_Unevaluated:
         case State_Evaluated_Uncertain:
-            if(evaluated_safes > 0) return OpResult_Lose;
+            if (evaluated_safes > 0)
+            {
+                Fail(var, true);
+                return OpResult_Lose;
+            }
         case State_Evaluated_Safe:
             break;
         case State_Flagged:
         case State_Flipped:
             return OpResult_Invalid;
         case State_Evaluated_Mine:
+            Fail(var, true);
             return OpResult_Lose;
         }
         constrains[var] = Success(var);
@@ -191,6 +196,7 @@ public:
             }
         case State_Evaluated_Uncertain:
         case State_Evaluated_Safe:
+            Fail(var, false);
             return OpResult_Lose;
         case State_Evaluated_Mine:
             map[var] = State_Flagged;
