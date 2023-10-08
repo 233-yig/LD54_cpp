@@ -137,6 +137,14 @@ public:
         switch(map[var])
         {
         case State_Unevaluated:
+            assumptions.clear();
+            assumptions[var] = 0;
+            assumption_mines = 1;
+            assumption_safes = 0;
+            if(!Solve(constrains.begin(), 0, 0))
+            {
+                break;
+            }
         case State_Evaluated_Uncertain:
             if (evaluated_safes > 0)
             {
@@ -158,9 +166,13 @@ public:
         {
             return OpResult_Success;
         }
-        int tries = constrains.size();
+        int tries = constrains.size() - 1;
         for(auto it = constrains.begin(); it != constrains.end(); ++it)
         {
+            if(it->first == var)
+            {
+                continue;
+            }
             if(rand() % tries-- == 0)
             {
                 map[it->first] = State_Unevaluated;

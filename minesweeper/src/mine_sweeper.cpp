@@ -1,4 +1,4 @@
-#include <mine_sweeper.h>
+#include "mine_sweeper.h"
 int MineSweeper::Success(int var)
 {
     int result = 0;
@@ -11,7 +11,7 @@ int MineSweeper::Success(int var)
         assumptions[var] = false;
         assumption_safes++;
     }
-    assert(Solve(constrains.begin(), 0, 0));
+    Solve(constrains.begin(), 0, 0);
     for (int i = 0; i < adj_max; i++)
     {
         int pos = GetVar(var, i);
@@ -33,7 +33,7 @@ int MineSweeper::Success(int var)
             continue;
         }
 
-        if(assumptions.contains(pos))
+        if(assumptions.find(pos) != assumptions.end())
         {
             result += assumptions[pos];
             continue;
@@ -42,7 +42,6 @@ int MineSweeper::Success(int var)
         int decided_safe_count = evaluated_safes + constrains.size() + assumption_safes;
         bool isMine = rand() % (width * height - decided_mine_count - decided_safe_count) < mines - decided_mine_count;
         (isMine ? assumption_mines : assumption_safes)++;
-        //assumptions[pos] = isMine;
         result += isMine;
     }
     return result;
@@ -62,25 +61,34 @@ void MineSweeper::Fail(int var, bool isMine)
         assumptions[var] = false;
         assumption_safes++;
     }
-    assert(Solve(constrains.begin(), 0, 0));
+    Solve(constrains.begin(), 0, 0);
     for(int i = 0; i < width * height; i++)
     {
         if(map.at(i) == State_Unevaluated)
         {
-
-            int decided_mine_count = evaluated_mines + flagged_count + assumption_mines;
-            int decided_safe_count = evaluated_safes + constrains.size() + assumption_safes;
-            bool isMine = rand() % (width * height - decided_mine_count - decided_safe_count) < mines - decided_mine_count;
-            (isMine ? assumption_mines : assumption_safes)++;
-            //assumptions[pos] = isMine;
-            if (isMine)
+            if (assumptions.find(i) == assumptions.end())
+            {
+                int decided_mine_count = evaluated_mines + flagged_count + assumption_mines;
+                int decided_safe_count = evaluated_safes + constrains.size() + assumption_safes;
+                bool isMine = rand() % (width * height - decided_mine_count - decided_safe_count) < mines - decided_mine_count;
+                if (isMine)
+                {
+                    assumption_mines++;
+                    map.at(i) = State_Lose;
+                }
+                else
+                {
+                    assumption_safes++;
+                }
+            }
+            else if (assumptions.at(i))
             {
                 map.at(i) = State_Lose;
             }
         }
         else if(map.at(i) == State_Evaluated_Uncertain)
         {
-            assert(assumptions.contains(i));
+            assert(assumptions.find(i) != assumptions.end());
             if(assumptions.at(i))
             {
                 map.at(i) = State_Lose;
@@ -184,7 +192,7 @@ bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_con
     }
     
 
-    bool assumed = assumptions.contains(var);
+    bool assumed = assumptions.find(var) != assumptions.end();
     //当前变量已确定
     switch(map[var])
     {
@@ -201,7 +209,7 @@ bool MineSweeper::Solve(std::unordered_map<int, int>::const_iterator current_con
         return Solve(current_constrain, varidx_of_current + 1, sum_of_current + 1);
     }
     //当前变量已假定
-    if(assumptions.contains(var))
+    if(assumptions.find(var) != assumptions.end())
     {
         return Solve(current_constrain, varidx_of_current + 1, sum_of_current + assumptions.at(var));
     }
