@@ -90,19 +90,15 @@ namespace godot{
             dbg = open;
             queue_redraw();
         }
-        bool Load(Vector2i mapSize, int mines, int max_flipped, String map)
+        void Load(Vector2i mapSize, int mines, int max_flipped, String map)
         {
-            bool result = game.Load(mapSize.width, mapSize.height, mines, max_flipped, map.ascii().get_data());
+            game.Load(mapSize.width, mapSize.height, mines, max_flipped, map.ascii().get_data());
             queue_redraw();
-            return result;
         }
         int Flag(Vector2i pos)
         {
             int result = game.Flag(pos.x + pos.y * game.Width());
-            if (result == OpResult_Success)
-            {
-                game.Analyse();
-            }
+
             if(result == OpResult_Success || result == OpResult_Win || result == OpResult_Lose)
             {
                 queue_redraw();
@@ -112,10 +108,7 @@ namespace godot{
         int Flip(Vector2i pos)
         {
             int result = game.Flip(pos.x + pos.y * game.Width());
-            if (result == OpResult_Success)
-            {
-                game.Analyse();
-            }
+
             if (result == OpResult_Success || result == OpResult_Win || result == OpResult_Lose)
             {
                 queue_redraw();
@@ -125,10 +118,7 @@ namespace godot{
         int Revert(Vector2i pos)
         {
             int result = game.Revert(pos.x + pos.y*game.Width());
-            if (result == OpResult_Success)
-            {
-                game.Analyse();
-            }
+
             if (result == OpResult_Success || result == OpResult_Win || result == OpResult_Lose)
             {
                 queue_redraw();

@@ -24,7 +24,39 @@ class MineSweeper
         State_Evaluated_Mine,
         State_Lose
     };
-
+    enum Assumptions{
+        Assumptions_Null,
+        Assumptions_Safe,
+        Assumptions_Mine
+    };
+    struct Assumption
+    {
+        std::vector<Assumptions> data;
+        int safe_count;
+        int mine_count;
+        Assumption& With(int pos, bool isMine)
+        {
+            data.at(pos) = isMine ? Assumptions_Mine : Assumptions_Safe;
+            (isMine ? mine_count : safe_count)++;
+            return *this;
+        }
+        Assumption& Without(int pos)
+        {
+            switch (data.at(pos))
+            {
+            default:
+                break;
+            case Assumptions_Mine:
+                mine_count--;
+                break;
+            case Assumptions_Safe:
+                safe_count--;
+                break;
+            }
+            data.at(pos) = Assumptions_Null;
+            return *this;
+        }
+    };
     static constexpr int adj_max = 8;
 
     int width = 0;
@@ -33,21 +65,25 @@ class MineSweeper
     int max_flipped = 0;
     
     std::vector<State> map;
+    std::unordered_map<int, int> constrains;
     int flagged_count = 0;
     int evaluated_mines = 0;
     int evaluated_safes = 0;
     int evaluated_uncertains = 0;
-    std::unordered_map<int, bool> assumptions;
-    int assumption_safes = 0;
-    int assumption_mines = 0;
-    std::unordered_map<int, int> constrains;
+    Assumption MakeAssumption()
+    {
+        Assumption result;
+        result.data.resize(width * height);
+        result.safe_count = 0;
+        result.mine_count = 0;
+        return result;
+    }
 
-    bool Solve(std::unordered_map<int, int>::const_iterator current_constrain, int varidx_of_current, int sum_of_current);
-    int GetVar(int pos, int offset)
+    int GetAdjPos(int pos, int adj)
     {
         int x = pos % width;
         int y = pos / width;
-        switch(offset)
+        switch(adj)
         {
             case 0:
                 if(x == 0 || y == 0) break;
@@ -76,11 +112,14 @@ class MineSweeper
         }
         return -1;
     }
+    
+    bool Possible(Assumption& assumption, std::unordered_map<int, int>::const_iterator current_constrain);
+
     int Success(int var);
     void Fail(int var, bool isMine);
 public:
-    void Analyse();
-    bool Load(int w, int h, int m, int f, const char* s)
+    void Analyse(bool incremental);
+    void Load(int w, int h, int m, int f, const char* s)
     {
         width = w;
         height = h;
@@ -88,14 +127,11 @@ public:
         max_flipped = f;
 
         map.resize(width * height);
+        constrains.clear();
         flagged_count = 0;
         evaluated_mines = 0;
         evaluated_safes = 0;
         evaluated_uncertains = 0;
-        assumptions.clear();
-        assumption_mines = 0;
-        assumption_safes = 0;
-        constrains.clear();
 
         for(int i = 0; i < width * height; i++, s++)
         {
@@ -119,57 +155,52 @@ public:
             }
             i--;
         }
-        if(!constrains.empty() && !Solve(constrains.begin(), 0, 0))
-        {
-            return false;
-        }
-        Analyse();
-        return true;
+
+        Analyse(false);
     }
     
     
-    OpResult Flip(int var)
+    OpResult Flip(int pos)
     {
-        if(var >= map.size())
+        if(pos >= map.size())
         {
             return OpResult_Invalid;
         }
-        switch(map[var])
+        switch(map.at(pos))
         {
         case State_Unevaluated:
-            assumptions.clear();
-            assumptions[var] = 0;
-            assumption_mines = 1;
-            assumption_safes = 0;
-            if(!Solve(constrains.begin(), 0, 0))
+            if(!Possible(MakeAssumption().With(pos, true), constrains.begin()))
             {
                 break;
             }
         case State_Evaluated_Uncertain:
             if (evaluated_safes > 0)
             {
-                Fail(var, true);
+                Fail(pos, true);
                 return OpResult_Lose;
             }
+            break;
         case State_Evaluated_Safe:
+            evaluated_safes--;
             break;
         case State_Flagged:
         case State_Flipped:
             return OpResult_Invalid;
         case State_Evaluated_Mine:
-            Fail(var, true);
+            Fail(pos, true);
             return OpResult_Lose;
         }
-        constrains[var] = Success(var);
-        map[var] = State_Flipped;
+        constrains[pos] = Success(pos);
+        map.at(pos) = State_Flipped;
         if(constrains.size() <= max_flipped)
         {
+            Analyse(true);
             return OpResult_Success;
         }
         int tries = constrains.size() - 1;
         for(auto it = constrains.begin(); it != constrains.end(); ++it)
         {
-            if(it->first == var)
+            if(it->first == pos)
             {
                 continue;
             }
@@ -177,6 +208,7 @@ public:
             {
                 map[it->first] = State_Unevaluated;
                 constrains.erase(it);
+                Analyse(false);
                 return OpResult_Success;
             }
         }
@@ -184,65 +216,79 @@ public:
         assert(false);
         return OpResult_Invalid;
     }
-    OpResult Flag(int var)
+    OpResult Flag(int pos)
     {
-        if(var >= map.size())
+        if(pos >= map.size())
         {
             return OpResult_Invalid;
         }
-        switch(map[var])
+        switch(map.at(pos))
         {
         case State_Flagged:
         case State_Flipped:
             return OpResult_Invalid;
         case State_Unevaluated:
-            assumptions.clear();
-            assumptions[var] = 0;
-            assumption_mines = 0;
-            assumption_safes = 1;
-            if(!Solve(constrains.begin(), 0, 0))
+            if(!Possible(MakeAssumption().With(pos, false), constrains.begin()))
             {
-                map[var] = State_Flagged;
+                map[pos] = State_Flagged;
                 flagged_count++;
                 break;
             }
         case State_Evaluated_Uncertain:
         case State_Evaluated_Safe:
-            Fail(var, false);
+            Fail(pos, false);
             return OpResult_Lose;
         case State_Evaluated_Mine:
-            map[var] = State_Flagged;
+            map.at(pos) = State_Flagged;
+            evaluated_mines--;
             flagged_count++;
             break;
         }
+
         if(flagged_count == mines)
         {
             return OpResult_Win;
         }
         return OpResult_Success;
     }
-    OpResult Revert(int var)
+    OpResult Revert(int pos)
     {
-        if(var >= map.size())
+        if(pos >= map.size())
         {
             return OpResult_Invalid;
         }
-        switch(map[var])
+        switch(map.at(pos))
         {
         case State_Unevaluated:
         case State_Evaluated_Uncertain:
         case State_Evaluated_Safe:
         case State_Evaluated_Mine:
-            return OpResult_Invalid;
         case State_Flagged:
-            map[var] = State_Unevaluated;
-            flagged_count--;
-            break;
+            return OpResult_Invalid;
+            // map.at(pos) = State_Unevaluated;
+            // flagged_count--;
+            // break;
         case State_Flipped:
-            map[var] = State_Unevaluated;
-            constrains.erase(var);
+            for(int i = 0; i < adj_max; i++)
+            {
+                int adj_pos = GetAdjPos(pos, i);
+                if(adj_pos == -1)
+                {
+                    continue;
+                }
+                State state = map.at(adj_pos);
+                switch(state)
+                {
+                case State_Evaluated_Uncertain:
+                case State_Evaluated_Mine:
+                    return OpResult_Invalid;
+                }
+            }
+            map.at(pos) = State_Unevaluated;
+            constrains.erase(pos);
             break;
         }
+        Analyse(false);
         return OpResult_Success;
     }
     
@@ -266,16 +312,16 @@ public:
     {
         return constrains.size();
     }
-    char GetState(int var) const
+    char GetState(int pos) const
     {
-        switch(map[var])
+        switch(map.at(pos))
         {
         case State_Unevaluated:    
             return 'e';
         case State_Flagged:
             return 'f';
         case State_Flipped:
-            return '0' + constrains.at(var);
+            return '0' + constrains.at(pos);
         case State_Evaluated_Safe:
             return 's';
         case State_Evaluated_Uncertain:
